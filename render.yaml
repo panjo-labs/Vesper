@@ -1,0 +1,19 @@
+# Render Blueprint: New > Blueprint, pick this repo, paste the two keys.
+services:
+  - type: web
+    name: vesper
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      # A premade voice; library voices need a paid ElevenLabs plan.
+      - key: ELEVENLABS_VOICE_ID
+        value: JBFqnCBsd6RMkjVDRZzb
+      - key: ELEVENLABS_MODEL
+        value: eleven_turbo_v2_5
+      - key: GEMMA_MODELS
+        value: google/gemma-4-26b-a4b-it:free,google/gemma-4-31b-it:free

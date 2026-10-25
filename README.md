@@ -34,7 +34,12 @@ machine expect a minute or more per show.
 
 ## Deploy
 
-One Hugging Face Space, Docker SDK, free CPU tier. Push this repo to it and
+**Render:** New → Blueprint, pick this repo, and paste `OPENROUTER_API_KEY`
+and `ELEVENLABS_API_KEY` when asked. `render.yaml` sets up a free Docker web
+service with a health check. Free instances sleep when idle, so the first
+visit after a quiet spell takes about a minute to wake.
+
+**Hugging Face:** one Space, Docker SDK, free CPU tier. Push this repo to it and
 set `OPENROUTER_API_KEY` and `ELEVENLABS_API_KEY` as Space secrets.
 
 ## Honest notes
