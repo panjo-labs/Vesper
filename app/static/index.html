@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Vesper</title>
+<meta name="description" content="Paste what you meant to read today. Listen to it instead." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200;0,6..72,300;0,6..72,400;1,6..72,200;1,6..72,300&display=swap" rel="stylesheet" />
+<style>
+:root{
+  color-scheme:dark;
+  --ink:#dde3dd; --ink-soft:#8b9a99; --ink-faint:#4d6063;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:#0b171e;overflow:hidden}
+body{font-family:"Newsreader",Georgia,serif;color:var(--ink);font-weight:300;
+  -webkit-font-smoothing:antialiased}
+#tide{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+.stage{position:relative;z-index:2;height:100%;display:grid;
+  grid-template-rows:auto 1fr auto;padding:clamp(1.3rem,4.5vw,3rem);gap:1rem}
+.view{display:contents}
+.view[hidden]{display:none}
+
+.title{align-self:start;margin:1.4rem 0 0;font-size:.95rem;font-style:italic;
+  color:var(--ink-faint);transition:color 2s ease}
+
+.centre{align-self:center;margin:0 auto;width:100%;max-width:34rem;text-align:center}
+
+textarea{
+  width:100%;height:clamp(9rem,30vh,14rem);resize:none;
+  background:rgba(0,0,0,.22);color:var(--ink);
+  border:1px solid var(--ink-faint);border-radius:3px;
+  padding:1rem 1.1rem;font:inherit;font-size:1.05rem;line-height:1.6;
+  transition:border-color .8s ease}
+textarea::placeholder{color:var(--ink-faint);font-style:italic}
+textarea:focus{outline:none;border-color:var(--ink-soft)}
+
+.row{display:flex;align-items:center;justify-content:center;gap:1.2rem;
+  margin-top:1.2rem;flex-wrap:wrap}
+select{background:transparent;color:var(--ink-soft);border:0;font:inherit;
+  font-size:.92rem;font-style:italic;cursor:pointer}
+select option{background:#0b171e;color:var(--ink)}
+
+button.quiet{background:transparent;border:1px solid var(--ink-faint);
+  color:var(--ink);font:inherit;font-size:.95rem;padding:.6rem 1.6rem;
+  border-radius:999px;cursor:pointer;transition:border-color .8s ease,opacity .4s}
+button.quiet:hover:not(:disabled){border-color:var(--ink-soft)}
+button.quiet:disabled{opacity:.45;cursor:default}
+
+.script{align-self:center;margin:0 auto;max-width:22ch;text-align:center;
+  font-size:clamp(1.45rem,4.8vw,2.4rem);line-height:1.45;font-weight:200;
+  letter-spacing:-.015em;text-wrap:balance;
+  max-height:62vh;overflow:hidden}
+.script span{color:var(--ink-faint);opacity:.4;
+  transition:color 1.1s ease,opacity 1.1s ease}
+.script span.near{color:var(--ink-soft);opacity:.78}
+.script span.now{color:var(--ink);opacity:1}
+
+.controls{align-self:end;display:flex;align-items:center;justify-content:center;
+  gap:1.4rem;padding-bottom:1.4rem}
+button.play{width:62px;height:62px;border-radius:50%;background:transparent;
+  border:1px solid var(--ink-faint);color:var(--ink);cursor:pointer;
+  display:grid;place-items:center;
+  transition:border-color 1s ease,transform .6s cubic-bezier(.2,.8,.3,1)}
+button.play:hover{border-color:var(--ink-soft)}
+button.play:active{transform:scale(.95)}
+button.play svg{width:20px;height:20px;fill:currentColor}
+.time{font-size:.9rem;color:var(--ink-faint);font-variant-numeric:tabular-nums;
+  min-width:7ch}
+.again{background:transparent;border:0;color:var(--ink-faint);font:inherit;
+  font-size:.86rem;font-style:italic;cursor:pointer;padding:.4rem}
+.again:hover{color:var(--ink-soft)}
+
+.note{margin:1.1rem auto 0;max-width:38ch;font-size:.88rem;font-style:italic;
+  color:var(--ink-soft);line-height:1.6}
+.note.bad{color:#d9a08c}
+
+:focus-visible{outline:1px solid var(--ink-soft);outline-offset:5px}
+@media (prefers-reduced-motion: reduce){.script span{transition-duration:.001ms}}
+</style>
+</head>
+<body>
+<canvas id="tide"></canvas>
+<audio id="audio" preload="auto"></audio>
+<audio id="bed" loop preload="none"></audio>
+
+<div class="stage">
+  <p class="title" id="title">Vesper</p>
+
+  <!-- paste -->
+  <div class="view" id="v-paste">
+    <div class="centre">
+      <textarea id="material" spellcheck="false"
+        placeholder="Paste what you meant to read today. Notes, an article, a thread, all of it at once."></textarea>
+      <div class="row">
+        <select id="minutes" aria-label="How long">
+          <option value="2">about two minutes</option>
+          <option value="3" selected>about three minutes</option>
+          <option value="5">about five minutes</option>
+        </select>
+        <button class="quiet" id="make">Make tonight&rsquo;s show</button>
+      </div>
+      <p class="note" id="note" hidden></p>
+    </div>
+    <div></div>
+  </div>
+
+  <!-- player -->
+  <div class="view" id="v-play" hidden>
+    <p class="script" id="script"></p>
+    <div class="controls">
+      <button class="play" id="play" aria-label="Play">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path id="icon" d="M8 5v14l11-7z"/></svg>
+      </button>
+      <span class="time" id="time">0:00</span>
+      <button class="again" id="again">something else</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   The rule: nothing moves faster than a breath. Rise ~0.45s,
+   fall ~2.2s. Siri and Alexa map amplitude straight to geometry
+   and twitch per syllable; twitching reads as alertness, which
+   is the opposite of the point.
+
+   Mood changes palette, horizon and texture. Never the physics.
+   ════════════════════════════════════════════════════════════ */
+
+const MOODS = {
+  tideline:{skyTop:"#0b171e",skyLow:"#122630",dawnTop:"#1a2430",dawnLow:"#3a3030",
+    bands:["#2f6b6e","#2f6b6e","#4e8d7e","#4e8d7e","#d2906a"],
+    horizon:.66,amp:1,alpha:.24,stars:0,ink:"#dde3dd"},
+  deepfield:{skyTop:"#070a16",skyLow:"#101a33",dawnTop:"#121733",dawnLow:"#2b2a4a",
+    bands:["#2b3f7a","#35508f","#4a6fb0","#6d8fd0","#9fb6e8"],
+    horizon:.72,amp:.8,alpha:.22,stars:1,ink:"#c9d2e8"},
+  ember:{skyTop:"#120d0f",skyLow:"#24161a",dawnTop:"#1d1416",dawnLow:"#3d2228",
+    bands:["#6e2b2b","#8f3a33","#a85244","#7d5a52","#5c5250"],
+    horizon:.78,amp:.62,alpha:.26,stars:0,ink:"#e6d6d2"}
+};
+
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $ = id => document.getElementById(id);
+
+const hex2rgb = h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16));
+const lerp = (a,b,t) => a+(b-a)*t;
+const lerpRGB = (a,b,t) => [lerp(a[0],b[0],t),lerp(a[1],b[1],t),lerp(a[2],b[2],t)];
+const rgbStr = c => "rgb("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+")";
+const rgba = (c,a) => "rgba("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+","+a+")";
+const ease = x => x<.5 ? 2*x*x : 1-Math.pow(-2*x+2,2)/2;
+
+function expand(m){return{
+  skyTop:hex2rgb(m.skyTop),skyLow:hex2rgb(m.skyLow),
+  dawnTop:hex2rgb(m.dawnTop),dawnLow:hex2rgb(m.dawnLow),
+  bands:m.bands.map(hex2rgb),horizon:m.horizon,amp:m.amp,
+  alpha:m.alpha,stars:m.stars,ink:hex2rgb(m.ink)};}
+function blend(a,b,t){return{
+  skyTop:lerpRGB(a.skyTop,b.skyTop,t),skyLow:lerpRGB(a.skyLow,b.skyLow,t),
+  dawnTop:lerpRGB(a.dawnTop,b.dawnTop,t),dawnLow:lerpRGB(a.dawnLow,b.dawnLow,t),
+  bands:a.bands.map((c,i)=>lerpRGB(c,b.bands[i],t)),
+  horizon:lerp(a.horizon,b.horizon,t),amp:lerp(a.amp,b.amp,t),
+  alpha:lerp(a.alpha,b.alpha,t),stars:lerp(a.stars,b.stars,t),
+  ink:lerpRGB(a.ink,b.ink,t)};}
+
+let cur = expand(MOODS.tideline), from = cur, target = cur, fade = 1;
+function setMood(name){
+  const m = MOODS[name] || MOODS.tideline;
+  from = cur; target = expand(m); fade = 0;
+}
+
+/* ── canvas ─────────────────────────────────────────────── */
+const cv = $("tide"), ctx = cv.getContext("2d");
+let W=0,H=0;
+function resize(){
+  const dpr = Math.min(devicePixelRatio||1,2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = W*dpr; cv.height = H*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener("resize",resize); resize();
+
+const STARS=[];
+for(let i=0;i<90;i++)STARS.push({x:Math.random(),y:Math.random()*.62,
+  r:.4+Math.random()*1,tw:Math.random()*6.2832,sp:.25+Math.random()*.5});
+
+const BANDS=[{amp:1,drift:.013,off:0},{amp:.78,drift:.019,off:.07},
+  {amp:.6,drift:.027,off:.15},{amp:.42,drift:.037,off:.24},
+  {amp:.26,drift:.051,off:.33}];
+
+/* ── audio ──────────────────────────────────────────────── */
+const audio = $("audio");
+// A quiet loop under the voice. If it can't load, the show plays without it.
+const bed = $("bed");
+bed.volume = 0.18;
+bed.addEventListener("error", () => bed.removeAttribute("src"));
+function bedFollow(){
+  if (!bed.getAttribute("src")) return;
+  if (audio.paused) bed.pause(); else bed.play().catch(() => {});
+}
+let actx=null, analyser=null, buf=null, level=0, waiting=false;
+
+function wireAudio(){
+  if (actx) return;
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = actx.createMediaElementSource(audio);
+  analyser = actx.createAnalyser();
+  analyser.fftSize = 1024;
+  buf = new Float32Array(analyser.fftSize);
+  src.connect(analyser);
+  analyser.connect(actx.destination);
+}
+function rms(){
+  if (!analyser) return 0;
+  analyser.getFloatTimeDomainData(buf);
+  let s = 0;
+  for (let i=0;i<buf.length;i++) s += buf[i]*buf[i];
+  return Math.min(1, Math.sqrt(s/buf.length) * 3.2);
+}
+
+/* ── transcript ─────────────────────────────────────────── */
+let words = [], spans = [], lastWord = -1;
+function layout(list){
+  words = list;
+  const el = $("script");
+  el.textContent = "";
+  spans = list.map((w,i)=>{
+    const s = document.createElement("span");
+    s.textContent = w.word + (i < list.length-1 ? " " : "");
+    el.appendChild(s);
+    return s;
+  });
+  lastWord = -1;
+}
+function paint(i){
+  if (i === lastWord) return;
+  lastWord = i;
+  for (let j=0;j<spans.length;j++){
+    const d = Math.abs(j-i);
+    spans[j].className = d===0?"now":d<=3?"near":"";
+  }
+  const el = spans[i];
+  if (el) el.scrollIntoView({block:"center",behavior:reduced?"auto":"smooth"});
+}
+function wordAt(t){
+  let lo=0, hi=words.length-1, best=0;
+  while (lo<=hi){
+    const mid=(lo+hi)>>1;
+    if (words[mid].start<=t){best=mid;lo=mid+1;} else hi=mid-1;
+  }
+  return best;
+}
+
+/* ── loop ───────────────────────────────────────────────── */
+let prev = performance.now(), phase = 0;
+function frame(now){
+  const dt = Math.min(.05,(now-prev)/1000); prev = now;
+
+  if (fade < 1){
+    fade = Math.min(1, fade + dt/4);
+    cur = fade>=1 ? target : blend(from,target,ease(fade));
+    document.documentElement.style.setProperty("--ink", rgbStr(cur.ink));
+  }
+
+  // While Gemma is writing, the tide breathes on its own so the wait
+  // feels like part of the thing rather than a spinner.
+  const raw = waiting ? .22 + .18*Math.sin(phase*.55)
+            : (audio.paused ? 0 : rms());
+  const k = raw>level ? 1-Math.exp(-dt/.45) : 1-Math.exp(-dt/2.2);
+  level += (raw-level)*k;
+
+  phase += dt * (reduced?0:1);
+  const dur = audio.duration || 0;
+  const progress = dur ? audio.currentTime/dur : 0;
+
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, rgbStr(lerpRGB(cur.skyTop,cur.dawnTop,progress*.8)));
+  g.addColorStop(1, rgbStr(lerpRGB(cur.skyLow,cur.dawnLow,progress*.7)));
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  if (cur.stars > .01){
+    for (let i=0;i<STARS.length;i++){
+      const s = STARS[i], tw = .45+.55*Math.sin(phase*s.sp+s.tw);
+      ctx.beginPath();
+      ctx.arc(((s.x+phase*.0016*s.sp)%1)*W, s.y*H, s.r, 0, 6.2832);
+      ctx.fillStyle = rgba(cur.ink, .5*tw*cur.stars*(1-progress*.55));
+      ctx.fill();
+    }
+  }
+
+  const horizon = H*cur.horizon;
+  ctx.globalCompositeOperation = "lighter";
+  for (let bi=0;bi<BANDS.length;bi++){
+    const b = BANDS[bi];
+    const base = horizon + bi*(H*.035);
+    const height = (H*.1)*b.amp*cur.amp*(.38+level*.95);
+    ctx.beginPath(); ctx.moveTo(0,H); ctx.lineTo(0,base);
+    for (let x=0;x<=W;x+=6){
+      const u = x/W;
+      const y = base - height*(
+        Math.sin((u*3.1+phase*b.drift*9+b.off)*6.2832)*.55 +
+        Math.sin((u*1.7-phase*b.drift*5.3+b.off*2)*6.2832)*.3 +
+        Math.sin((u*5.3+phase*b.drift*3.1)*6.2832)*.15);
+      ctx.lineTo(x,y);
+    }
+    ctx.lineTo(W,H); ctx.closePath();
+    const grad = ctx.createLinearGradient(0,base-height,0,H);
+    grad.addColorStop(0, rgbStr(cur.bands[bi]));
+    grad.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.globalAlpha = cur.alpha*(.6+level*.5);
+    ctx.fillStyle = grad; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+
+  if (!audio.paused && words.length){
+    paint(wordAt(audio.currentTime));
+    const left = Math.max(0, Math.floor((dur||0) - audio.currentTime));
+    $("time").textContent = Math.floor(left/60)+":"+String(left%60).padStart(2,"0");
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ── flow ───────────────────────────────────────────────── */
+const note = $("note"), makeBtn = $("make");
+function say(msg, bad){
+  note.hidden = !msg;
+  note.textContent = msg || "";
+  note.className = bad ? "note bad" : "note";
+}
+
+async function make(){
+  const material = $("material").value.trim();
+  if (material.length < 40){
+    say("A little more than that, and I'll have something to read.", true);
+    return;
+  }
+  makeBtn.disabled = true;
+  waiting = true;
+  say("Reading it. This takes under a minute.");
+
+  try {
+    const r = await fetch("/api/show", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ material, minutes: Number($("minutes").value) })
+    });
+    const data = await r.json();
+    if (!r.ok){
+      // FastAPI validation errors arrive as a list, not a string.
+      const d = Array.isArray(data.detail) ? data.detail.map(e => e.msg).join(" ") : data.detail;
+      throw new Error(d || "Something went wrong.");
+    }
+
+    setMood(data.mood);
+    $("title").textContent = data.title;
+    layout(data.words);
+    audio.src = "data:audio/mpeg;base64," + data.audio_b64;
+    bed.src = "/api/ambient/" + data.mood;
+
+    $("v-paste").hidden = true;
+    $("v-play").hidden = false;
+    waiting = false;
+    say("");
+  } catch (e) {
+    waiting = false;
+    makeBtn.disabled = false;
+    say(e.message, true);
+  }
+}
+makeBtn.addEventListener("click", make);
+
+const playBtn = $("play"), icon = $("icon");
+const PLAY = "M8 5v14l11-7z", PAUSE = "M6 5h4v14H6zM14 5h4v14h-4z";
+playBtn.addEventListener("click", async () => {
+  wireAudio();
+  if (actx.state === "suspended") await actx.resume();
+  if (audio.paused){
+    await audio.play();
+    bedFollow();
+    icon.setAttribute("d", PAUSE); playBtn.setAttribute("aria-label","Pause");
+  } else {
+    audio.pause();
+    bedFollow();
+    icon.setAttribute("d", PLAY); playBtn.setAttribute("aria-label","Play");
+  }
+});
+audio.addEventListener("ended", () => {
+  bed.pause();
+  icon.setAttribute("d", PLAY); playBtn.setAttribute("aria-label","Play");
+});
+audio.addEventListener("loadedmetadata", () => {
+  const s = Math.floor(audio.duration || 0);
+  $("time").textContent = Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+});
+
+$("again").addEventListener("click", () => {
+  audio.pause(); audio.removeAttribute("src"); audio.load();
+  bed.pause(); bed.removeAttribute("src");
+  icon.setAttribute("d", PLAY);
+  $("v-play").hidden = true;
+  $("v-paste").hidden = false;
+  $("title").textContent = "Vesper";
+  makeBtn.disabled = false;
+  setMood("tideline");
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+
+# Local only: demo videos, test output, post draft
+demo/
+*.mp4
+test.mp3
+DEV_POST_DRAFT.md
